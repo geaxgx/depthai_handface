@@ -1,8 +1,7 @@
 # Face and hand tracking with DepthAI
 
-Running Google Mediapipe Face Mesh and Hand Tracking models on [Luxonis DepthAI](https://docs.luxonis.com/projects/hardware/en/latest/) hardware (OAK-D, OAK-D lite, OAK-1,...). The hand tracking is optionnal and can be disabled by setting the argument `nb_hands` to 0.
+Running Google Mediapipe Face Mesh and Hand Tracking models on [Luxonis DepthAI](https://docs.luxonis.com/projects/hardware/en/latest/) hardware (OAK-D, OAK-D lite, OAK-1,...). The tracking is limited to one face and two hands. The hand tracking is optionnal and can be disabled by setting the argument `nb_hands` to 0.
 <br>
-**WIP**
 
 <p align="center"><img src="media/yoga_eye_600_opt.gif" alt="Demo" /></p>
 
@@ -12,7 +11,8 @@ The models used in this repository are:
 - [Mediapipe Face Mesh with attention](https://drive.google.com/file/d/1tV7EJb3XgMS7FwOErTgLU1ZocYyNmwlf/preview). This is an alternative to the previous model. In addition to the 468 landmarks, it can detect 10 more landmarks corresponding to the irises. Its predictions are more accurate around lips and eyes, at the expense of more compute (FPS on OAK-D ~10 frames/s). I call this model the attention model.
 - The Mediapipe Palm Detection model (version 0.8.0) and Mediapipe Hand Landmarks models (version lite), already used in [depthai_hand_tracker](https://github.com/geaxgx/depthai_hand_tracker).
 
-Note that, whenever possible, the post-processing of the models output has been integrated/concatenated to the models themselves, thanks to [PINTO's simple-onnx-processing-tools](https://github.com/PINTO0309/simple-onnx-processing-tools). Thus, Non Maximum Suppression for the face detection and palm detection models  as well as some calculation with the 468 or 478 face landmarks are done at the level of the models. The alternative would have been to do these calculations on the host or in a script node on the device (slower).
+The original models are tflite models, they all have been converted to onnx with [PINTO's tflite2tensorflow](https://github.com/PINTO0309/tflite2tensorflow).
+Note also that, whenever possible, the post-processing of the models output has been integrated/concatenated to the models themselves, thanks to [PINTO's simple-onnx-processing-tools](https://github.com/PINTO0309/simple-onnx-processing-tools). Thus, Non Maximum Suppression for the face detection and palm detection models  as well as some calculation with the 468 or 478 face landmarks are done at the level of the models. The alternative would have been to do these calculations on the host or in a script node on the device (slower).
 
 
 ## Install
@@ -45,7 +45,7 @@ Tracker arguments:
                         to improve fps. Hand tracking is disabled.
   -n {0,1,2}, --nb_hands {0,1,2}
                         Number of hands tracked (default=2)
-  -xyz, --xyz           Enable spatial location measure of palm centers
+  -xyz, --xyz           Enable spatial location measure of hands and face
   -f INTERNAL_FPS, --internal_fps INTERNAL_FPS
                         Fps of internal color camera. Too high value lower NN
                         fps (default= depends on the model)
@@ -86,7 +86,7 @@ Renderer arguments:
 
     ```./demo.py [-a] -xyz```
 
-    The measure is made on the wrist keypoints and on a point of the forehead between the eyes.
+    The measures are made on the wrist keypoints and on a point of the forehead between the eyes.
 
 
 
@@ -105,7 +105,54 @@ Renderer arguments:
 |f|Switch between several hand landmark rendering|
 |b|Draw the landmarks on a black background|
 
+## Face landmarks
+Click on the image below to visualize the 468 landmarks ([*source*](https://github.com/google/mediapipe/blob/master/mediapipe/modules/face_geometry/data/canonical_face_model_uv_visualization.png)).
 
+
+[<p align="center"><img src="media/canonical_face_model_uv_visualization.png" alt="Face landmarks" width="300"/></p>](media/canonical_face_model_uv_visualization.png)
+
+## Hand landmarks
+You can find a description [there](https://github.com/geaxgx/depthai_hand_tracker#landmarks).
+
+## Code
+There are 2 classes:
+* **HandFaceTracker**, responsible of computing the hand and face landmarks,
+* **HandFaceRenderer**, which is an example of rendering of the landmarks. Having 2 seperate classes let you easily personalize the rendering.
+  
+A typical usage scenario: 
+```
+tracker = HandFaceTracker(...)
+
+renderer = HandFaceRenderer(...)
+
+while True:
+    frame, faces, hands = tracker.next_frame()
+    if frame is None: break
+    # Draw face and hands
+    frame = renderer.draw(frame, faces, hands)
+    key = renderer.waitKey(delay=1)
+    if key == ord('q'):
+        break
+```
+Let's focus on:
+```
+frame, faces, hands = tracker.next_frame()
+```
+* `frame` is the raw frame on which the detections and landmark regression has been done;
+* `faces` is a list of `Face` instances. Because we limit the detection to one face max, this list is either empy (if no face has been detected) or contains one element;
+* `hands` is a list of `HandRegion` instances. The number of instances depends on the nb_hands parameter and the number of hands actually detected, so between 0 and 2 instances.
+
+The classes `Face` and `HandRegion` are described in `mediapipe_utils.py`.
+
+The schema below describes the two main attributes of the `Face` class: `landmarks` and `norm_landmarks`.
+
+<p align="center"><img src="media/face_landmark_types.png" alt="Face landmarks" /></p>
+
+## Examples
+
+|||
+|-|-|
+|[Blink detection](examples/blink_detection)  |[<img src="examples/blink_detection/media/demo.gif" alt="3D visualization" width="300"/>](examples/blink_detection)|
 
 ## Credits
 * [Google Mediapipe](https://github.com/google/mediapipe)

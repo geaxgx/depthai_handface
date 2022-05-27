@@ -1,10 +1,8 @@
 import cv2
 import numpy as np
 from mediapipe_utils import *
-from face_mesh_connections import FACEMESH_TESSELATION, FACEMESH_LIPS, FACEMESH_EYES, \
-            FACEMESH_IRISES, FACEMESH_LEFT_EYE, FACEMESH_LEFT_EYEBROW,\
-            FACEMESH_RIGHT_EYE, FACEMESH_RIGHT_EYEBROW, FACEMESH_FACE_OVAL,\
-            FACEMESH_LEFT_IRIS, FACEMESH_RIGHT_IRIS
+from face_mesh_connections import FACEMESH_TESSELATION, FACEMESH_LIPS, FACEMESH_EYES_EYEBROWS, \
+            FACEMESH_IRISES, FACEMESH_FACE_OVAL
 from shapely.geometry import Polygon, Point
 
 LINES_HAND = [[0,1],[1,2],[2,3],[3,4], 
@@ -33,6 +31,7 @@ class HandFaceRenderer:
         self.show_face_rot_rect = False
         self.show_face_landmarks = True
         self.face_style = 1
+        self.window_title = "Hand & Face Tracking" if self.tracker.nb_hands > 0 else "Face Tracking"
 
         if self.tracker.with_attention:
             # Landmark indexes that are not concerned by refinement
@@ -135,7 +134,7 @@ class HandFaceRenderer:
                     if self.face_style == 2:
                         self.draw_line_set(face, FACEMESH_TESSELATION, (255,255,255), 1)
                     self.draw_line_set(face, FACEMESH_LIPS, (0,128,255), 2)
-                    self.draw_line_set(face, FACEMESH_EYES, (0,255,0), 2)
+                    self.draw_line_set(face, FACEMESH_EYES_EYEBROWS, (0,255,0), 2)
                     self.draw_line_set(face, FACEMESH_FACE_OVAL, (255,255,255), 2)
                     if self.tracker.with_attention:
                         self.draw_line_set(face, FACEMESH_IRISES, (0,0,255), 2)
@@ -158,7 +157,7 @@ class HandFaceRenderer:
                     except:
                         pass
                     self.draw_line_set(face, FACEMESH_LIPS, (0,128,255), 2)
-                    self.draw_line_set(face, FACEMESH_EYES, (0,255,0), 2)
+                    self.draw_line_set(face, FACEMESH_EYES_EYEBROWS, (0,255,0), 2)
                    
         if self.show_xyz:
             x0, y0 = info_ref_x - 40, info_ref_y + 40
@@ -191,7 +190,7 @@ class HandFaceRenderer:
     def waitKey(self, delay=1):
         if self.show_fps:
                 self.tracker.fps.draw(self.frame, orig=(50,50), size=1, color=(240,180,100))
-        cv2.imshow("Hand tracking", self.frame)
+        cv2.imshow(self.window_title, self.frame)
         if self.output:
             self.output.write(self.frame)
         key = cv2.waitKey(delay) 
@@ -216,10 +215,6 @@ class HandFaceRenderer:
             if self.tracker.xyz:
                 self.show_xyz_zone = not self.show_xyz_zone 
         elif key == ord('f'):
-            # if self.face_style == 0:
-            #     self.face_style = 2
-            # elif self.face_style == 2:
-            #     self.face_style = 1
             nb_styles = 4 if self.tracker.with_attention else 3
             self.face_style = (self.face_style + 1) % nb_styles
         elif key == ord('h'):

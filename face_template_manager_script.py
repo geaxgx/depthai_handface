@@ -55,10 +55,10 @@ def send_result_no_face(fd_inf, nb_lm_inf):
     result = dict([("fd_inf", fd_inf), ("nb_lm_inf", nb_lm_inf)])
     send_result(result)
 
-def send_result_face(fd_inf, nb_lm_inf, lm_score=0, rect_center_x=0, rect_center_y=0, rect_size=0, rotation=0, sqn_xy=0, sqn_z=0):
+def send_result_face(fd_inf, nb_lm_inf, lm_score=0, rect_center_x=0, rect_center_y=0, rect_size=0, rotation=0, rrn_xy=0, rrn_z=0, sqn_xy=0, sqn_z=0):
     result = dict([("fd_inf", fd_inf), ("nb_lm_inf", nb_lm_inf), ("lm_score", [lm_score]), ("rotation", [rotation]),
             ("rect_center_x", [rect_center_x]), ("rect_center_y", [rect_center_y]), ("rect_size", [rect_size]), 
-            ('sqn_xy', [sqn_xy]), ('sqn_z', [sqn_z]) ])
+            ('rrn_xy', [rrn_xy]), ('rrn_z', [rrn_z]), ('sqn_xy', [sqn_xy]), ('sqn_z', [sqn_z]) ])
     send_result(result)
 
 # def rr2img(rrn_x, rrn_y):
@@ -100,16 +100,17 @@ if double_face:
 
 while True:
     # Read frame from cam
-    ${_TRACE2} ("Before Face manager received input frame")
-
     cam_frame = node.io['cam_in'].get()
     ${_TRACE2} ("Face manager received input frame")
 
     # Send it to host and hand_manager
     if track_hands:
         node.io['hand_manager'].send(cam_frame)
+        ${_TRACE2} ("Face manager sent input frame to hand manager")
+
     ${_IF_SEND_RGB_TO_HOST}
     node.io['cam_out'].send(cam_frame)
+    ${_TRACE2} ("Face manager  sent input frame to host")
     ${_IF_SEND_RGB_TO_HOST}
 
     nb_lm_inf = 0
@@ -188,7 +189,7 @@ while True:
         # and send a new second request on the 2nd instance of face landmark NN
         # with a new frame (but with the same parameters)
         # Waitng time for old model ~ 0.035s
-        # Waitng time for model with attention ~ 0.087s
+        # Waitng time for model with attention ~ 0.087s 
         if double_face_sent:
             start_timer = time()
 
@@ -206,20 +207,20 @@ while True:
             ${_TRACE1} (f"== Landmark score: {lm_score}")
 
             if lm_score > lm_score_tresh:
+                rrn_xy = lm_result.getLayerFp16("pp_rrn_xy")
+                rrn_z = lm_result.getLayerFp16("pp_rrn_z")
                 sqn_xy = lm_result.getLayerFp16("pp_sqn_xy")
                 sqn_z = lm_result.getLayerFp16("pp_sqn_z")
                 min_max = lm_result.getLayerFp16("pp_min_max")
 
                 # Send result to host
-                send_result_face(send_new_frame_to_branch==1, nb_lm_inf, lm_score, sqn_rr_center_x, sqn_rr_center_y, sqn_rr_size, rotation, sqn_xy, sqn_z)
+                send_result_face(send_new_frame_to_branch==1, nb_lm_inf, lm_score, sqn_rr_center_x, sqn_rr_center_y, sqn_rr_size, rotation, rrn_xy, rrn_z, sqn_xy, sqn_z)
                 ${_TRACE1} (f"== Landmarks - face confirmed")
             else:
                 send_result_no_face(send_new_frame_to_branch==1, nb_lm_inf)
                 send_new_frame_to_branch = 1
                 ${_TRACE1} (f"== Landmarks - face not confirmed")
 
-        # else:
-        #     sleep(0.04) 
         sleep_duration = (mean(wait_duration2) -mean(wait_duration))/2
         if sleep_duration > 0:
             ${_TRACE2} (f"== Sleep {sleep_duration} - mean1: {mean(wait_duration)} - mean2: {mean(wait_duration2)}")
@@ -266,12 +267,14 @@ while True:
     ${_TRACE1} (f"= Landmark score: {lm_score}")
 
     if lm_score > lm_score_tresh:
+        rrn_xy = lm_result.getLayerFp16("pp_rrn_xy")
+        rrn_z = lm_result.getLayerFp16("pp_rrn_z")
         sqn_xy = lm_result.getLayerFp16("pp_sqn_xy")
         sqn_z = lm_result.getLayerFp16("pp_sqn_z")
         min_max = lm_result.getLayerFp16("pp_min_max")
 
         # Send result to host
-        send_result_face(send_new_frame_to_branch==1, nb_lm_inf, lm_score, sqn_rr_center_x, sqn_rr_center_y, sqn_rr_size, rotation, sqn_xy, sqn_z)
+        send_result_face(send_new_frame_to_branch==1, nb_lm_inf, lm_score, sqn_rr_center_x, sqn_rr_center_y, sqn_rr_size, rotation, rrn_xy, rrn_z, sqn_xy, sqn_z)
         
         send_new_frame_to_branch = 2 
 

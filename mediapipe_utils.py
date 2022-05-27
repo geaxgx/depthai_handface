@@ -79,6 +79,7 @@ class Face:
                 expressed in the squared image during processing,
                 expressed in the source rectangular image when returned to the user
         lm_score: global landmark score
+        norm_landmarks : 3D landmarks coordinates in the rotated bounding rectangle, normalized [0,1]
         landmarks : 3D landmark coordinates in pixel in the source rectangular image
         xyz: real 3D world coordinates of the wrist landmark, or of the palm center (if landmarks are not used),
         xyz_zone: (left, top, right, bottom), pixel coordinates in the source rectangular image 

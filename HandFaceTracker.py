@@ -131,6 +131,10 @@ class HandFaceTracker:
            
         self.trace = trace
         self.single_hand_tolerance_thresh = single_hand_tolerance_thresh
+        self.double_face = double_face
+        if self.nb_hands > 0:
+            print("With double_face flag, the hand tracking is disabled !")
+            self.nb_hands = 0
 
         self.device = dai.Device()
 
@@ -161,7 +165,6 @@ class HandFaceTracker:
             else:
                 self.internal_fps = internal_fps 
             
-            self.double_face = double_face
             if self.double_face:
                 print("This is an experimental feature that should help to improve the FPS")
                 if self.input_type == "rgb" and internal_fps is None:
@@ -169,9 +172,7 @@ class HandFaceTracker:
                         self.internal_fps = 14
                     else:
                         self.internal_fps = 38
-                if self.nb_hands > 0:
-                    print("With double_face flag, the hand tracking is disabled !")
-                    self.nb_hands = 0
+                
 
             print(f"Internal camera FPS set to: {self.internal_fps}") 
 
@@ -267,6 +268,7 @@ class HandFaceTracker:
         if self.input_type == "rgb":
             # ColorCamera
             print("Creating Color Camera")
+            # _pgraph_ name 
             cam = pipeline.createColorCamera()
             if self.resolution[0] == 1920:
                 cam.setResolution(dai.ColorCameraProperties.SensorResolution.THE_1080_P)
@@ -593,31 +595,62 @@ class HandFaceTracker:
         face.rect_points = mpu.rotated_rect_to_points(face.rect_x_center_a, face.rect_y_center_a, face.rect_w_a, face.rect_h_a, face.rotation)
         face.lm_score = res["lm_score"][face_idx]
         if self.with_attention:
-            # sqn_xy is the concatenation of:
+            # rrn_xy and sqn_xy are the concatenation of 2d landmarks:
             # 468 basic landmarks
             # 80 lips landmarks
             # 71 left eye landmarks
             # 71 right eye landmarks
             # 5 left iris landmarks
             # 5 right iris landmarks
-            face.landmarks = (np.array(res["sqn_xy"][face_idx]).reshape(-1,2) * self.frame_size).astype(np.int)
+            #
+            # rrn_z and sqn_z corresponds to 468 basic landmarks
+            
+            # face.landmarks = 3D landmarks in the original image in pixels
+            lm_xy = (np.array(res["sqn_xy"][face_idx]).reshape(-1,2) * self.frame_size).astype(np.int)
             lm_zone = {}
-            lm_zone["lips"] = face.landmarks[468:548]
-            lm_zone["left eye"] = face.landmarks[548:619]
-            lm_zone["right eye"] = face.landmarks[619:690]
-            lm_zone["left iris"] = face.landmarks[690:695]
-            lm_zone["right iris"] = face.landmarks[695:700]
-            # for zone,idx_map in mpu.XY_REFINEMENT_IDX_MAP.items():
+            lm_zone["lips"] = lm_xy[468:548]
+            lm_zone["left eye"] = lm_xy[548:619]
+            lm_zone["right eye"] = lm_xy[619:690]
+            lm_zone["left iris"] = lm_xy[690:695]
+            lm_zone["right iris"] = lm_xy[695:700]
             for zone in ["lips", "left eye", "right eye"]:
                 idx_map = mpu.XY_REFINEMENT_IDX_MAP[zone]
-                np.put_along_axis(face.landmarks, idx_map, lm_zone[zone], axis=0)
+                np.put_along_axis(lm_xy, idx_map, lm_zone[zone], axis=0)
                 # np.put_along_axis(lm_raw[:,:2], idx_map, lm_zone[zone], axis=0)
-            face.landmarks[468:473] = lm_zone["left iris"]
-            face.landmarks[473:478] = lm_zone["right iris"]
-            face.landmarks = face.landmarks[:478]
+            lm_xy[468:473] = lm_zone["left iris"]
+            lm_xy[473:478] = lm_zone["right iris"]
+            lm_xy = lm_xy[:478]
+            lm_z = (np.array(res['sqn_z'][face_idx]) * self.frame_size)
+            left_iris_z = np.mean(lm_z[mpu.Z_REFINEMENT_IDX_MAP['left iris']])
+            right_iris_z = np.mean(lm_z[mpu.Z_REFINEMENT_IDX_MAP['right iris']])
+            lm_z = np.hstack((lm_z, np.repeat([left_iris_z], 5), np.repeat([right_iris_z], 5))).reshape(-1, 1)
+            face.landmarks = np.hstack((lm_xy, lm_z)).astype(np.int)
+
+            # face.norm_landmarks = 3D landmarks inside the rotated rectangle, values in [0..1]
+            nlm_xy = np.array(res["rrn_xy"][face_idx]).reshape(-1,2)
+            nlm_zone = {}
+            nlm_zone["lips"] = nlm_xy[468:548]
+            nlm_zone["left eye"] = nlm_xy[548:619]
+            nlm_zone["right eye"] = nlm_xy[619:690]
+            nlm_zone["left iris"] = nlm_xy[690:695]
+            nlm_zone["right iris"] = nlm_xy[695:700]
+            for zone in ["lips", "left eye", "right eye"]:
+                idx_map = mpu.XY_REFINEMENT_IDX_MAP[zone]
+                np.put_along_axis(nlm_xy, idx_map, nlm_zone[zone], axis=0)
+            nlm_xy[468:473] = nlm_zone["left iris"]
+            nlm_xy[473:478] = nlm_zone["right iris"]
+            nlm_xy = nlm_xy[:478]
+            nlm_z = np.array(res['rrn_z'][face_idx])
+            left_iris_z = np.mean(nlm_z[mpu.Z_REFINEMENT_IDX_MAP['left iris']])
+            right_iris_z = np.mean(nlm_z[mpu.Z_REFINEMENT_IDX_MAP['right iris']])
+            nlm_z = np.hstack((nlm_z, np.repeat([left_iris_z], 5), np.repeat([right_iris_z], 5))).reshape(-1, 1)
+            face.norm_landmarks = np.hstack((nlm_xy, nlm_z))
 
         else:
-            face.landmarks = (np.array(res["sqn_xy"][face_idx]) * self.frame_size).reshape(-1,2).astype(np.int)
+            face.norm_landmarks = np.hstack((np.array(res["rrn_xy"][face_idx]).reshape(-1,2), np.array(res["rrn_z"][face_idx]).reshape(-1,1)))
+            lm_xy = (np.array(res["sqn_xy"][face_idx]) * self.frame_size).reshape(-1,2)
+            lm_z = (np.array(res['sqn_z'][face_idx]) * self.frame_size).reshape(-1, 1)
+            face.landmarks = np.hstack((lm_xy, lm_z)).astype(np.int)
 
         # If we added padding to make the image square, we need to remove this padding from landmark coordinates and from rect_points
         if self.pad_h > 0:
@@ -632,6 +665,26 @@ class HandFaceTracker:
         return face
 
     def next_frame(self):
+        if self.double_face and self.input_type != "rgb" and self.seq_num == 0:
+            # Because there are 2 inferences running in parallel in double face mode, we need to send 2 frames on the first loop iteration
+            if self.input_type == "image":
+                frame = self.img.copy()
+            else:
+                ok, frame = self.cap.read()
+                if not ok:
+                    return None, None, None
+            # Cropping and/or padding of the video frame
+            video_frame = frame[self.crop_h:self.crop_h+self.frame_size, self.crop_w:self.crop_w+self.frame_size]
+            self.prev_video_frame = video_frame
+           
+            frame = dai.ImgFrame()
+            frame.setType(dai.ImgFrame.Type.BGR888p)
+            h,w = video_frame.shape[:2]
+            frame.setWidth(w)
+            frame.setHeight(h)
+            frame.setData(video_frame.transpose(2,0,1).flatten())
+            self.q_face_manager_in.send(frame)
+
         self.seq_num += 1
         self.fps.update()
         if self.input_type == "rgb":
@@ -706,7 +759,8 @@ class HandFaceTracker:
             for face in faces:
                 face.xyz, face.xyz_zone = self.spatial_calc.get_xyz(frame_depth, face.landmarks[9,:2])
 
-
+        if self.double_face and self.input_type != "rgb":
+            video_frame, self.prev_video_frame = self.prev_video_frame, video_frame
         return video_frame, faces, hands
 
 

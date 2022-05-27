@@ -15,7 +15,7 @@ parser_tracker.add_argument('-2', "--double_face", action="store_true",
 parser_tracker.add_argument('-n', '--nb_hands', type=int, choices=[0,1,2], default=2, 
                     help="Number of hands tracked (default=%(default)i)")                    
 parser_tracker.add_argument('-xyz', "--xyz", action="store_true", 
-                    help="Enable spatial location measure of palm centers")
+                    help="Enable spatial location measure of hands and face")
 parser_tracker.add_argument('-f', '--internal_fps', type=int, 
                     help="Fps of internal color camera. Too high value lower NN fps (default= depends on the model)")                    
 parser_tracker.add_argument('--internal_frame_height', type=int,                                                                                 
@@ -46,7 +46,7 @@ renderer = HandFaceRenderer(
 while True:
     frame, faces, hands = tracker.next_frame()
     if frame is None: break
-    # Draw hands
+    # Draw face and hands
     frame = renderer.draw(frame, faces, hands)
     key = renderer.waitKey(delay=1)
     if key == 27 or key == ord('q'):
