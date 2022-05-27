@@ -132,7 +132,7 @@ class HandFaceTracker:
         self.trace = trace
         self.single_hand_tolerance_thresh = single_hand_tolerance_thresh
         self.double_face = double_face
-        if self.nb_hands > 0:
+        if self.double_face and self.nb_hands > 0:
             print("With double_face flag, the hand tracking is disabled !")
             self.nb_hands = 0
 
