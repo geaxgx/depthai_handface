@@ -115,7 +115,7 @@ Click on the image below to visualize the 468 landmarks ([*source*](https://gith
 You can find a description [there](https://github.com/geaxgx/depthai_hand_tracker#landmarks).
 
 ## Code
-There are 2 classes:
+The code relies on 2 classes:
 * **HandFaceTracker**, responsible of computing the hand and face landmarks,
 * **HandFaceRenderer**, which is an example of rendering of the landmarks. Having 2 seperate classes let you easily personalize the rendering.
   
@@ -152,7 +152,7 @@ The schema below describes the two main attributes of the `Face` class: `landmar
 
 |||
 |-|-|
-|[Blink detection](examples/blink_detection)  |[<img src="examples/blink_detection/media/demo.gif" alt="3D visualization" width="300"/>](examples/blink_detection)|
+|[Blink detection](examples/blink_detection)  |[<img src="examples/blink_detection/media/demo.gif" alt="Blink detection" width="300"/>](examples/blink_detection)|
 
 ## Credits
 * [Google Mediapipe](https://github.com/google/mediapipe)
