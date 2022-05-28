@@ -1,6 +1,6 @@
 """
 This file is the template of the scripting node source code in edge mode
-Substitution is made in FaceMeshEdge.py
+Substitution is made in HandFaceTracker.py
 
 In the following:
 rrn_ : normalized [0:1] coordinates in rotated rectangle coordinate systems 
@@ -47,26 +47,19 @@ def send_result(result):
     node.io['host'].send(buffer)
     ${_TRACE2} ("Face manager sent result to host")
 
-# fd_inf: boolean. Has the face detection run on the frame ?
-# nb_lm_inf: 0 or 1. Number of landmark regression inferences on the frame.
-# fd_inf=True and nb_lm_inf=0 means the face detection hasn't found any face
-# fd_inf, nb_lm_inf are used for statistics
-def send_result_no_face(fd_inf, nb_lm_inf):
-    result = dict([("fd_inf", fd_inf), ("nb_lm_inf", nb_lm_inf)])
+
+# status: 
+# - 0: the face detection has run and detected no face 
+# - 1: there is a face landmark inference running (result will be sent to the host directly from the landmark NN),  
+#      rect_center_x, rect_center_y, rect_size, rotation contains valid information
+def send_result_no_face():
+    result = dict([("status", 0)])
     send_result(result)
 
-def send_result_face(fd_inf, nb_lm_inf, lm_score=0, rect_center_x=0, rect_center_y=0, rect_size=0, rotation=0, rrn_xy=0, rrn_z=0, sqn_xy=0, sqn_z=0):
-    result = dict([("fd_inf", fd_inf), ("nb_lm_inf", nb_lm_inf), ("lm_score", [lm_score]), ("rotation", [rotation]),
-            ("rect_center_x", [rect_center_x]), ("rect_center_y", [rect_center_y]), ("rect_size", [rect_size]), 
-            ('rrn_xy', [rrn_xy]), ('rrn_z', [rrn_z]), ('sqn_xy', [sqn_xy]), ('sqn_z', [sqn_z]) ])
+def send_result_face(rect_center_x=0, rect_center_y=0, rect_size=0, rotation=0):
+    result = dict([("status", 1), ("rotation", rotation),
+            ("rect_center_x", rect_center_x), ("rect_center_y", rect_center_y), ("rect_size", rect_size)])
     send_result(result)
-
-# def rr2img(rrn_x, rrn_y):
-#     # Convert a point (rrn_x, rrn_y) expressed in normalized rotated rectangle (rrn)
-#     # into (X, Y) expressed in normalized image (sqn)
-#     X = sqn_rr_center_x + sqn_rr_size * ((rrn_x - 0.5) * cos_rot + (0.5 - rrn_y) * sin_rot)
-#     Y = sqn_rr_center_y + sqn_rr_size * ((rrn_y - 0.5) * cos_rot + (rrn_x - 0.5) * sin_rot)
-#     return X, Y
 
 def normalize_radians(angle):
     return angle - 2 * pi * floor((angle + pi) / (2 * pi))
@@ -113,7 +106,6 @@ while True:
     ${_TRACE2} ("Face manager  sent input frame to host")
     ${_IF_SEND_RGB_TO_HOST}
 
-    nb_lm_inf = 0
     if send_new_frame_to_branch == 1: # Routing frame to fd branch
         node.io['pre_fd_manip_frame'].send(cam_frame)
         # import time; time.sleep(5)
@@ -131,7 +123,7 @@ while True:
         box_size = max(box_w, box_h)
         
         if valid_outputs == 0:
-            send_result_no_face(True, 0)
+            send_result_no_face()
             send_new_frame_to_branch = 1
             ${_TRACE1} (f"Face detection - no face detected")
             continue
@@ -164,7 +156,6 @@ while True:
     cfg.setCropRotatedRect(rr, True)
     cfg.setResize(lm_input_size, lm_input_size)
     node.io['pre_lm_manip_cfg'].send(cfg)
-    nb_lm_inf += 1
     ${_TRACE2} ("Face manager sent config to pre_lm manip")
 
     sqn_rr_data = NNData(12)
@@ -180,6 +171,9 @@ while True:
 
     node.io['rot'].send(rot_data)
     ${_TRACE2} ("Face manager sent params to lm NN")
+
+    # Let the host know there is a face landmark inference running (so that the host knows it will need to wait the result directly sent by the face landmark NN)
+    send_result_face(sqn_rr_center_x, sqn_rr_center_y, sqn_rr_size, rotation)
 
 
 
@@ -199,27 +193,7 @@ while True:
             ${_TRACE2} (f"Just waited {wait} s")
             wait_duration.append(wait)
             ${_TRACE2} ("== Face manager received result from lm NN 2")
-            if with_attention:
-                lm_score = lm_result.getLayerFp16("lm_conv_faceflag")[0] 
-            else:
-                lm_score = lm_result.getLayerFp16("lm_score")[0]
-            lm_score = 1 / (1 + exp(-lm_score))
-            ${_TRACE1} (f"== Landmark score: {lm_score}")
 
-            if lm_score > lm_score_tresh:
-                rrn_xy = lm_result.getLayerFp16("pp_rrn_xy")
-                rrn_z = lm_result.getLayerFp16("pp_rrn_z")
-                sqn_xy = lm_result.getLayerFp16("pp_sqn_xy")
-                sqn_z = lm_result.getLayerFp16("pp_sqn_z")
-                min_max = lm_result.getLayerFp16("pp_min_max")
-
-                # Send result to host
-                send_result_face(send_new_frame_to_branch==1, nb_lm_inf, lm_score, sqn_rr_center_x, sqn_rr_center_y, sqn_rr_size, rotation, rrn_xy, rrn_z, sqn_xy, sqn_z)
-                ${_TRACE1} (f"== Landmarks - face confirmed")
-            else:
-                send_result_no_face(send_new_frame_to_branch==1, nb_lm_inf)
-                send_new_frame_to_branch = 1
-                ${_TRACE1} (f"== Landmarks - face not confirmed")
 
         sleep_duration = (mean(wait_duration2) -mean(wait_duration))/2
         if sleep_duration > 0:
@@ -245,7 +219,8 @@ while True:
         node.io['sqn_rr2'].send(sqn_rr_data)
         node.io['rot2'].send(rot_data)
         ${_TRACE2} ("== Face manager sent params to lm NN 2")
-
+        # Let the host know there is a face landmark inference running (so that the host knows it will need to wait the result directly sent by the face landmark NN)
+        send_result_face(sqn_rr_center_x, sqn_rr_center_y, sqn_rr_size, rotation)
         double_face_sent = True
         start_timer2 = time()
 
@@ -267,15 +242,8 @@ while True:
     ${_TRACE1} (f"= Landmark score: {lm_score}")
 
     if lm_score > lm_score_tresh:
-        rrn_xy = lm_result.getLayerFp16("pp_rrn_xy")
-        rrn_z = lm_result.getLayerFp16("pp_rrn_z")
         sqn_xy = lm_result.getLayerFp16("pp_sqn_xy")
-        sqn_z = lm_result.getLayerFp16("pp_sqn_z")
         min_max = lm_result.getLayerFp16("pp_min_max")
-
-        # Send result to host
-        send_result_face(send_new_frame_to_branch==1, nb_lm_inf, lm_score, sqn_rr_center_x, sqn_rr_center_y, sqn_rr_size, rotation, rrn_xy, rrn_z, sqn_xy, sqn_z)
-        
         send_new_frame_to_branch = 2 
 
         # # Calculate the ROI for next frame
@@ -291,6 +259,5 @@ while True:
         rotation = normalize_radians(rotation)
         ${_TRACE1} (f"Landmarks - face confirmed")
     else:
-        send_result_no_face(send_new_frame_to_branch==1, nb_lm_inf)
         send_new_frame_to_branch = 1
         ${_TRACE1} (f"Landmarks - face not confirmed")

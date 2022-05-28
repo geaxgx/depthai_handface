@@ -132,9 +132,11 @@ class HandFaceTracker:
         self.trace = trace
         self.single_hand_tolerance_thresh = single_hand_tolerance_thresh
         self.double_face = double_face
-        if self.double_face and self.nb_hands > 0:
-            print("With double_face flag, the hand tracking is disabled !")
-            self.nb_hands = 0
+        if self.double_face:
+            print("This is an experimental feature that should help to improve the FPS")
+            if self.nb_hands > 0:
+                print("With double_face flag, the hand tracking is disabled !")
+                self.nb_hands = 0
 
         self.device = dai.Device()
 
@@ -158,20 +160,32 @@ class HandFaceTracker:
                     print("Warning: depth unavailable on this device, 'xyz' argument is ignored")
 
             if internal_fps is None:
-                if self.with_attention:
-                    self.internal_fps = 11
+                if self.double_face:
+                    if self.with_attention:
+                        self.internal_fps = 14
+                    else:
+                        self.internal_fps = 41
                 else:
-                    self.internal_fps = 25
+                    if self.with_attention:
+                        self.internal_fps = 11
+                    else:
+                        if self.nb_hands == 0:
+                            self.internal_fps = 27
+                        elif self.nb_hands == 1:
+                            self.internal_fps = 24
+                        else: # nb_hands = 2
+                            self.internal_fps = 19
+
+
             else:
                 self.internal_fps = internal_fps 
             
-            if self.double_face:
-                print("This is an experimental feature that should help to improve the FPS")
+            
                 if self.input_type == "rgb" and internal_fps is None:
                     if self.with_attention:
                         self.internal_fps = 14
                     else:
-                        self.internal_fps = 38
+                        self.internal_fps = 41
                 
 
             print(f"Internal camera FPS set to: {self.internal_fps}") 
@@ -242,6 +256,7 @@ class HandFaceTracker:
         if self.nb_hands > 0:
             self.q_hand_manager_out = self.device.getOutputQueue(name="hand_manager_out", maxSize=2, blocking=True)
         self.q_face_manager_out = self.device.getOutputQueue(name="face_manager_out", maxSize=2, blocking=True)
+        self.q_flm_nn_out = self.device.getOutputQueue(name="flm_nn_out", maxSize=2, blocking=True)
         # For showing outputs of ImageManip nodes (debugging)
         if self.trace & 4:
             if self.nb_hands > 0:
@@ -424,6 +439,10 @@ class HandFaceTracker:
         face_manager_script.outputs['rot'].link(flm_nn.inputs['pp_rot'])
         flm_nn.out.link(face_manager_script.inputs['from_lm_nn'])
 
+        flm_nn_out = pipeline.create(dai.node.XLinkOut)
+        flm_nn_out.setStreamName("flm_nn_out")
+        flm_nn.out.link(flm_nn_out.input)
+
         if self.double_face:
             print("Creating Face Landmark pre processing image manip 2") 
             pre_flm_manip2 = pipeline.create(dai.node.ImageManip)
@@ -441,6 +460,9 @@ class HandFaceTracker:
             face_manager_script.outputs['sqn_rr2'].link(flm_nn2.inputs['pp_sqn_rr'])
             face_manager_script.outputs['rot2'].link(flm_nn2.inputs['pp_rot'])
             flm_nn2.out.link(face_manager_script.inputs['from_lm_nn2'])
+
+            flm_nn2.out.link(flm_nn_out.input)
+
 
         if self.xyz:
             print("Creating MonoCameras, Stereo and SpatialLocationCalculator nodes")
@@ -586,14 +608,24 @@ class HandFaceTracker:
 
         return hand
 
-    def extract_face_data(self, res, face_idx):
+    def extract_face_data(self, res_lm_script, res_lm_nn):
+        if self.with_attention:
+            lm_score = res_lm_nn.getLayerFp16("lm_conv_faceflag")[0] 
+        else:
+            lm_score = res_lm_nn.getLayerFp16("lm_score")[0]
+        if lm_score < self.flm_score_thresh: return None
         face = mpu.Face()
-        face.rect_x_center_a = res["rect_center_x"][face_idx] * self.frame_size
-        face.rect_y_center_a = res["rect_center_y"][face_idx] * self.frame_size
-        face.rect_w_a = face.rect_h_a = res["rect_size"][face_idx] * self.frame_size
-        face.rotation = res["rotation"][face_idx] 
+        face.lm_score = lm_score
+        face.rect_x_center_a = res_lm_script["rect_center_x"] * self.frame_size
+        face.rect_y_center_a = res_lm_script["rect_center_y"] * self.frame_size
+        face.rect_w_a = face.rect_h_a = res_lm_script["rect_size"] * self.frame_size
+        face.rotation = res_lm_script["rotation"]
         face.rect_points = mpu.rotated_rect_to_points(face.rect_x_center_a, face.rect_y_center_a, face.rect_w_a, face.rect_h_a, face.rotation)
-        face.lm_score = res["lm_score"][face_idx]
+        sqn_xy = res_lm_nn.getLayerFp16("pp_sqn_xy")
+        sqn_z = res_lm_nn.getLayerFp16("pp_sqn_z")
+        rrn_xy = res_lm_nn.getLayerFp16("pp_rrn_xy")
+        rrn_z = res_lm_nn.getLayerFp16("pp_rrn_z")
+
         if self.with_attention:
             # rrn_xy and sqn_xy are the concatenation of 2d landmarks:
             # 468 basic landmarks
@@ -606,7 +638,7 @@ class HandFaceTracker:
             # rrn_z and sqn_z corresponds to 468 basic landmarks
             
             # face.landmarks = 3D landmarks in the original image in pixels
-            lm_xy = (np.array(res["sqn_xy"][face_idx]).reshape(-1,2) * self.frame_size).astype(np.int)
+            lm_xy = (np.array(sqn_xy).reshape(-1,2) * self.frame_size).astype(np.int)
             lm_zone = {}
             lm_zone["lips"] = lm_xy[468:548]
             lm_zone["left eye"] = lm_xy[548:619]
@@ -616,18 +648,17 @@ class HandFaceTracker:
             for zone in ["lips", "left eye", "right eye"]:
                 idx_map = mpu.XY_REFINEMENT_IDX_MAP[zone]
                 np.put_along_axis(lm_xy, idx_map, lm_zone[zone], axis=0)
-                # np.put_along_axis(lm_raw[:,:2], idx_map, lm_zone[zone], axis=0)
             lm_xy[468:473] = lm_zone["left iris"]
             lm_xy[473:478] = lm_zone["right iris"]
             lm_xy = lm_xy[:478]
-            lm_z = (np.array(res['sqn_z'][face_idx]) * self.frame_size)
+            lm_z = (np.array(sqn_z) * self.frame_size)
             left_iris_z = np.mean(lm_z[mpu.Z_REFINEMENT_IDX_MAP['left iris']])
             right_iris_z = np.mean(lm_z[mpu.Z_REFINEMENT_IDX_MAP['right iris']])
             lm_z = np.hstack((lm_z, np.repeat([left_iris_z], 5), np.repeat([right_iris_z], 5))).reshape(-1, 1)
             face.landmarks = np.hstack((lm_xy, lm_z)).astype(np.int)
 
             # face.norm_landmarks = 3D landmarks inside the rotated rectangle, values in [0..1]
-            nlm_xy = np.array(res["rrn_xy"][face_idx]).reshape(-1,2)
+            nlm_xy = np.array(rrn_xy).reshape(-1,2)
             nlm_zone = {}
             nlm_zone["lips"] = nlm_xy[468:548]
             nlm_zone["left eye"] = nlm_xy[548:619]
@@ -640,16 +671,16 @@ class HandFaceTracker:
             nlm_xy[468:473] = nlm_zone["left iris"]
             nlm_xy[473:478] = nlm_zone["right iris"]
             nlm_xy = nlm_xy[:478]
-            nlm_z = np.array(res['rrn_z'][face_idx])
+            nlm_z = np.array(rrn_z)
             left_iris_z = np.mean(nlm_z[mpu.Z_REFINEMENT_IDX_MAP['left iris']])
             right_iris_z = np.mean(nlm_z[mpu.Z_REFINEMENT_IDX_MAP['right iris']])
             nlm_z = np.hstack((nlm_z, np.repeat([left_iris_z], 5), np.repeat([right_iris_z], 5))).reshape(-1, 1)
             face.norm_landmarks = np.hstack((nlm_xy, nlm_z))
 
         else:
-            face.norm_landmarks = np.hstack((np.array(res["rrn_xy"][face_idx]).reshape(-1,2), np.array(res["rrn_z"][face_idx]).reshape(-1,1)))
-            lm_xy = (np.array(res["sqn_xy"][face_idx]) * self.frame_size).reshape(-1,2)
-            lm_z = (np.array(res['sqn_z'][face_idx]) * self.frame_size).reshape(-1, 1)
+            face.norm_landmarks = np.hstack((np.array(rrn_xy).reshape(-1,2), np.array(rrn_z).reshape(-1,1)))
+            lm_xy = (np.array(sqn_xy) * self.frame_size).reshape(-1,2)
+            lm_z = (np.array(sqn_z) * self.frame_size).reshape(-1, 1)
             face.landmarks = np.hstack((lm_xy, lm_z)).astype(np.int)
 
         # If we added padding to make the image square, we need to remove this padding from landmark coordinates and from rect_points
@@ -736,11 +767,16 @@ class HandFaceTracker:
                 hand = self.extract_hand_data(res, i)
                 hands.append(hand)
 
-        res = marshal.loads(self.q_face_manager_out.get().getData())
+        res_lm_script = marshal.loads(self.q_face_manager_out.get().getData())
+        status = res_lm_script["status"]
         faces = []
-        for i in range(len(res.get("lm_score",[]))):
-            face = self.extract_face_data(res, i)
-            faces.append(face)
+        # status = 0 means the face detector has run but detected no face
+        # status = 1 means face_manager_script has initiated an face landmark inference,
+        #            and the face landmark NN will send directly the result here, on the host
+        if status == 1:
+            res_lm_nn = self.q_flm_nn_out.get()
+            face = self.extract_face_data(res_lm_script, res_lm_nn)
+            if face is not None: faces.append(face)
 
         if self.xyz:
             t = now()

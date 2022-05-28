@@ -1,6 +1,6 @@
 """
 This file is the template of the scripting node source code in edge mode
-Substitution is made in HandTrackerEdge.py
+Substitution is made in HandFaceTracker.py
 
 In the following:
 rrn_ : normalized [0:1] coordinates in rotated rectangle coordinate systems 
