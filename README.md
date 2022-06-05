@@ -148,6 +148,15 @@ The schema below describes the two main attributes of the `Face` class: `landmar
 
 <p align="center"><img src="media/face_landmark_types.png" alt="Face landmarks" /></p>
 
+## Pipeline
+
+A few explanations on the pipeline:
+* There are 2 Script nodes, one manages the face detection/landmark regression, the other manages the hands detection/landmark regression. However, the face manager script has more responsabilities than the hand manager script (kind-of super manager). The face manager is the only recipient of the color camera frames, the frames are then dispatched to the hand manager and to the host. This way, we assure that all the models work on the same image and the landmarks are drawn on the image used for inference. The face manager has been chosen as super manager because the face models are slower than the hand models, so it has more time to do these supplementary tasks while it waits for inference results.
+* The hand landmarks are sent to the host by the hand manager script. To save time, the face landmarks are directly sent to the host by the face landmark model, and the face manager script only sends the additional information corresponding to the rotated bounding rectangle.
+* The face landmark model (represented by the node named "NeuralNetwork - flm_nn" on the graph) takes 2 inputs from the face manager (pp_rot and pp_sqn_rr). They described the rotated bounding rectangle. This information is used by the model to post-process the 468 landmarks (it is faster to do the post-processing by a NeuralNet than by a Script when the amount of information to process is important).
+* Stereo is aligned with the Color camera. The spatial location calcultations are done by the host, which assures that the stero frame used for the calculation is synchronized with the color frame (via timestamps).
+<p align="center"><img src="media/pipeline_graph.png" alt="Face landmarks" /></p>
+
 ## Examples
 
 |||
