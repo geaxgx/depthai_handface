@@ -2,7 +2,6 @@
 
 import sys
 
-from torch import threshold
 sys.path.append("../..")
 
 from HandFaceTracker import HandFaceTracker
