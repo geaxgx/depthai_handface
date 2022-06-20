@@ -112,7 +112,7 @@ Renderer arguments:
 |6|Show/hide the zone used to measure the spatial location (small purple square) (-xyz)|
 |f|Switch between several face landmark rendering|
 |m|Switch between several face metric landmark rendering|
-|f|Switch between several face pose rendering|
+|p|Switch between several face pose rendering|
 |h|Switch between several hand landmark rendering|
 |b|Draw the landmarks on a black background|
 
