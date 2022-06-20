@@ -29,7 +29,8 @@ python3 -m pip install -r requirements.txt
 
 ```
 ->./demo.py -h
-usage: demo.py [-h] [-i INPUT] [-a] [-2] [-n {0,1,2}] [-xyz] [-f INTERNAL_FPS]
+usage: demo.py [-h] [-i INPUT] [-a] [-p] [-2] [-n {0,1,2}] [-xyz]
+               [-f INTERNAL_FPS]
                [--internal_frame_height INTERNAL_FRAME_HEIGHT] [-t [TRACE]]
                [-o OUTPUT]
 
@@ -41,8 +42,11 @@ Tracker arguments:
                         Path to video or image file to use as input (if not
                         specified, use OAK color camera)
   -a, --with_attention  Use face landmark with attention model
-  -2, --double_face     EXPERIMENTAL. Run a 2nd occurence of the face landmark Neural Network
-                        to improve fps. Hand tracking is disabled.
+  -p, --use_face_pose   Calculate the face pose tranformation matrix and
+                        metric landmarks
+  -2, --double_face     EXPERIMENTAL. Run a 2nd occurence of the face landmark
+                        Neural Network to improve fps. Hand tracking is
+                        disabled.
   -n {0,1,2}, --nb_hands {0,1,2}
                         Number of hands tracked (default=2)
   -xyz, --xyz           Enable spatial location measure of hands and face
@@ -88,6 +92,11 @@ Renderer arguments:
 
     The measures are made on the wrist keypoints and on a point of the forehead between the eyes.
 
+- In case you need to work with the metric landmarks (see below) and/or the pose transformation matrix, which provides mapping from a static canonical face model to the runtime face, add the argument `-p` or `--use_face_pose`:
+  
+    ```./demo.py [-a] -p```
+   
+
 
 
 
@@ -102,7 +111,9 @@ Renderer arguments:
 |5|Show/hide hand spatial location (-xyz)|
 |6|Show/hide the zone used to measure the spatial location (small purple square) (-xyz)|
 |f|Switch between several face landmark rendering|
-|f|Switch between several hand landmark rendering|
+|m|Switch between several face metric landmark rendering|
+|f|Switch between several face pose rendering|
+|h|Switch between several hand landmark rendering|
 |b|Draw the landmarks on a black background|
 
 ## Face landmarks
@@ -144,9 +155,14 @@ frame, faces, hands = tracker.next_frame()
 
 The classes `Face` and `HandRegion` are described in `mediapipe_utils.py`.
 
-The schema below describes the two main attributes of the `Face` class: `landmarks` and `norm_landmarks`.
+The schema below describes the two default types of face landmarks: `landmarks` and `norm_landmarks` (in the `Face` class):
 
 <p align="center"><img src="media/face_landmark_types.png" alt="Face landmarks" /></p>
+
+By using the `-p` or `--use_face_pose` argument, a third type of landmarks becomes available: `metric_landmarks`. They correspond to the 3D runtime face metric landmarks (unit=cm) aligned with the [canonical metric face landmarks](https://google.github.io/mediapipe/solutions/face_mesh.html#canonical-face-model). In the figure below, the metric landmarks are drawn on the right side. The axis of the C.S. in which the metric landmarks are represented are drawn on the left side. Note that the origin of the C.S.  is inside the head:
+
+<p align="center"><img src="media/metric_landmarks.gif" alt="Metric landmarks" /></p>
+
 
 ## Pipeline
 
@@ -165,5 +181,6 @@ A few explanations on the pipeline:
 
 ## Credits
 * [Google Mediapipe](https://github.com/google/mediapipe)
+* Rassibassi for the [python code](https://github.com/Rassibassi/mediapipeDemos/blob/main/custom/face_geometry.py) that calculates the face pose transformation matrix and the metric landmarks.  
 * Katsuya Hyodo a.k.a [Pinto](https://github.com/PINTO0309), the Wizard of Model Conversion !
 * The video used in the illustration is [6 Eye Exercises: Tighten Droopy Eyelids and Reduce Wrinkles Around Eyes/ Blushwithme-Parmita](https://www.youtube.com/watch?v=X12oV-tVIpQ&list=PLrLHadod7vE821rcmUhM0LNrrn0DR9ZUb&index=4&ab_channel=Blushwithme-Parmita)  

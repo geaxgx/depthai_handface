@@ -10,6 +10,8 @@ parser_tracker.add_argument('-i', '--input', type=str,
                     help="Path to video or image file to use as input (if not specified, use OAK color camera)")
 parser_tracker.add_argument("-a", "--with_attention", action="store_true",
                     help="Use face landmark with attention model")
+parser_tracker.add_argument('-p', "--use_face_pose", action="store_true", 
+                    help="Calculate the face pose tranformation matrix and metric landmarks")
 parser_tracker.add_argument('-2', "--double_face", action="store_true", 
                     help="EXPERIMENTAL. Run a 2nd occurence of the face landmark Neural Network to improve fps. Hand tracking is disabled.")
 parser_tracker.add_argument('-n', '--nb_hands', type=int, choices=[0,1,2], default=2, 
@@ -32,6 +34,7 @@ tracker_args = {a:dargs[a] for a in ['internal_fps', 'internal_frame_height'] if
 tracker = HandFaceTracker(
         input_src=args.input, 
         double_face=args.double_face,
+        use_face_pose=args.use_face_pose,
         xyz=args.xyz,
         with_attention=args.with_attention,
         nb_hands=args.nb_hands,

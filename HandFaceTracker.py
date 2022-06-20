@@ -12,6 +12,12 @@ import sys
 from string import Template
 import marshal
 from HostSpatialCalc import HostSpatialCalc
+from face_geometry import ( 
+                PCF,
+                get_metric_landmarks,
+                procrustes_landmark_basis,
+                canonical_metric_landmarks
+            )
 
 
 SCRIPT_DIR = Path(__file__).resolve().parent
@@ -68,21 +74,26 @@ class HandFaceTracker:
     Mediapipe Hand and Face Tracker for depthai (= Mediapipe Hand tracker + Mediapipe Facemesh)
     Arguments:
     - input_src: frame source, 
-                    - "rgb" or None: OAK* internal color camera,
-                    - a file path of an image or a video,
-                    - an integer (eg 0) for a webcam id,
+            - "rgb" or None: OAK* internal color camera,
+            - a file path of an image or a video,
+            - an integer (eg 0) for a webcam id,
     - nb_hands: 0, 1 or 2. Number of hands max tracked. If 0, then hand tracking is not used. 1 is faster than 2.
+    - use_face_pose: boolean. If yes, compute the face pose transformation matrix and the metric landmarks.
+            The face pose tranformation matrix provides mapping from the static canonical face model to the runtime face.
+            The metric landmarks are the 3D runtime metric landmarks aligned with the canonical metric face landmarks (unit: cm).
     - xyz : boolean, when True calculate the (x, y, z) coords of face (measure on the forehead) and hands.
     - crop : boolean which indicates if square cropping on source images is applied or not
     - internal_fps : when using the internal color camera as input source, set its FPS to this value (calling setFps()).
     - resolution : sensor resolution "full" (1920x1080) or "ultra" (3840x2160),
     - internal_frame_height : when using the internal color camera, set the frame height (calling setIspScale()).
-                    The width is calculated accordingly to height and depends on value of 'crop'
+            The width is calculated accordingly to height and depends on value of 'crop'
     - single_hand_tolerance_thresh (when nb_hands=2 only) : if there is only one hand in a frame, 
-                    in order to know when a second hand will appear you need to run the palm detection 
-                    in the following frames. Because palm detection is slow, you may want to delay 
-                    the next time you will run it. 'single_hand_tolerance_thresh' is the number of 
-                    frames during only one hand is detected before palm detection is run again.   
+            in order to know when a second hand will appear you need to run the palm detection 
+            in the following frames. Because palm detection is slow, you may want to delay 
+            the next time you will run it. 'single_hand_tolerance_thresh' is the number of 
+            frames during only one hand is detected before palm detection is run again.  
+    - focus: None or int between 0 and 255. Color camera focus. 
+            If None, auto-focus is active. Otherwise, the focus is set to 'focus' 
     - trace : int, 0 = no trace, otherwise print some debug messages or show output of ImageManip nodes
             if trace & 1, print application level info like number of palm detections,
             if trace & 2, print lower level info like when a message is sent or received by the manager script node,
@@ -95,6 +106,7 @@ class HandFaceTracker:
                 with_attention=True,
                 double_face=False,
                 nb_hands=2,
+                use_face_pose=False,
                 xyz=False,
                 crop=False,
                 internal_fps=None,
@@ -102,6 +114,7 @@ class HandFaceTracker:
                 internal_frame_height=640,
                 hlm_score_thresh=0.8,
                 single_hand_tolerance_thresh=3,
+                focus=None,
                 trace=0
                 ):
 
@@ -128,6 +141,10 @@ class HandFaceTracker:
         self.xyz = False
         self.crop = crop 
         self.use_world_landmarks = True
+        if focus is None:
+            self.focus = None
+        else:
+            self.focus = max(min(255, int(focus)), 0)
            
         self.trace = trace
         self.single_hand_tolerance_thresh = single_hand_tolerance_thresh
@@ -272,6 +289,19 @@ class HandFaceTracker:
         self.fps = FPS()
         self.seq_num = 0
 
+        self.use_face_pose = use_face_pose
+        if self.use_face_pose:
+            calib_data = self.device.readCalibration()
+            self.rgb_matrix= np.array(calib_data.getCameraIntrinsics(dai.CameraBoardSocket.RGB, resizeWidth=self.img_w, resizeHeight=self.img_h))
+            self.rgb_dist_coef = np.array(calib_data.getDistortionCoefficients(dai.CameraBoardSocket.RGB))
+            self.pcf = PCF(
+                near=1,
+                far=10000,
+                frame_height=self.img_h,
+                frame_width=self.img_w,
+                fy=self.rgb_matrix[1][1],
+            )
+
     def create_pipeline(self):
         print("Creating pipeline...")
         # Start defining a pipeline
@@ -293,6 +323,8 @@ class HandFaceTracker:
             cam.setInterleaved(False)
             cam.setIspScale(self.scale_nd[0], self.scale_nd[1])
             cam.setFps(self.internal_fps)
+            if self.focus is not None:
+                cam.initialControl.setManualFocus(self.focus)
 
             if self.crop:
                 cam.setVideoSize(self.frame_size, self.frame_size)
@@ -693,6 +725,13 @@ class HandFaceTracker:
             for i in range(len(face.rect_points)):
                 face.rect_points[i][0] -= self.pad_w
 
+        if self.use_face_pose:
+            screen_landmarks = (face.landmarks / np.array([self.img_w, self.img_h, self.img_w])).T
+            face.metric_landmarks, face.pose_transform_mat = get_metric_landmarks(screen_landmarks, self.pcf)
+            # https://github.com/google/mediapipe/issues/1379#issuecomment-752534379
+            face.pose_transform_mat[1:3, :] = -face.pose_transform_mat[1:3, :]
+            face.pose_rotation_vector, _ = cv2.Rodrigues(face.pose_transform_mat[:3, :3])
+            face.pose_translation_vector = face.pose_transform_mat[:3, 3, None]
         return face
 
     def next_frame(self):

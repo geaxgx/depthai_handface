@@ -70,20 +70,37 @@ class HandednessAverage:
 class Face:
     """
         Attributes:
-        rect_x_center, rect_y_center : center coordinates of the rotated bounding rectangle, normalized [0,1] in the squared image
-        rect_w, rect_h : width and height of the rotated bounding rectangle, normalized in the squared image (may be > 1)
-        rotation : rotation angle of rotated bounding rectangle with y-axis in radian
-        rect_x_center_a, rect_y_center_a : center coordinates of the rotated bounding rectangle, in pixels in the squared image
-        rect_w_a, rect_h_a : width and height of the rotated bounding rectangle, in pixels in the squared image
-        rect_points : list of the 4 points coordinates of the rotated bounding rectangle, in pixels 
+        - rect_x_center, rect_y_center : center coordinates of the rotated bounding rectangle, normalized [0,1] in the squared image
+        - rect_w, rect_h : width and height of the rotated bounding rectangle, normalized in the squared image (may be > 1)
+        - rotation : rotation angle of rotated bounding rectangle with y-axis in radian
+        - rect_x_center_a, rect_y_center_a : center coordinates of the rotated bounding rectangle, in pixels in the squared image
+        - rect_w_a, rect_h_a : width and height of the rotated bounding rectangle, in pixels in the squared image
+        - rect_points : list of the 4 points coordinates of the rotated bounding rectangle, in pixels 
                 expressed in the squared image during processing,
                 expressed in the source rectangular image when returned to the user
-        lm_score: global landmark score
-        norm_landmarks : 3D landmarks coordinates in the rotated bounding rectangle, normalized [0,1]
-        landmarks : 3D landmark coordinates in pixel in the source rectangular image
-        xyz: real 3D world coordinates of the wrist landmark, or of the palm center (if landmarks are not used),
-        xyz_zone: (left, top, right, bottom), pixel coordinates in the source rectangular image 
+        - lm_score: global landmark score
+        - norm_landmarks : 3D landmarks coordinates in the rotated bounding rectangle, normalized [0,1]
+        - landmarks : 3D landmark coordinates in pixel in the source rectangular image
+        
+        The following attributes are populated only if HandFaceTracker.xyz is True:
+        - xyz: real 3D world coordinates of the wrist landmark, or of the palm center (if landmarks are not used),
+        - xyz_zone: (left, top, right, bottom), pixel coordinates in the source rectangular image 
                 of the rectangular zone used to estimate the depth
+        
+        The 4 following attributes are populated only if HandFaceTracker.use_face_pose is True:
+        - pose_transform_mat: face pose transformation matrix that provides mapping from the static canonical face model to the runtime face. 
+                Tries to distinguish a head pose change from a facial expression change and to only reflect the former.
+                Is a 4x4 matrix and contains only the following components:
+                    * Uniform scale
+                    * Rotation
+                    * Translation
+                The last row is `[0 0 0 1]`
+        The 2 following attributes contains the same information than 'pose_transform_mat'
+        but are more practical when we want to project points using cv2.projectPoints :
+        - pose_rotation_vector: cv2.Rodrigues(face.pose_transform_mat[:3, :3])
+        - pose_translation_vector: pose_transform_mat[:3, 3, None]
+        - metric_landmarks: 
+                Corresponds to the 3D runtime face metric landmarks (unit=cm) aligned with the canonical metric face landmarks.
         """
 
     def print(self):
