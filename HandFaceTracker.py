@@ -87,6 +87,8 @@ class HandFaceTracker:
     - resolution : sensor resolution "full" (1920x1080) or "ultra" (3840x2160),
     - internal_frame_height : when using the internal color camera, set the frame height (calling setIspScale()).
             The width is calculated accordingly to height and depends on value of 'crop'
+    - use_gesture : boolean, when True, recognize hand poses froma predefined set of poses
+                    (ONE, TWO, THREE, FOUR, FIVE, OK, PEACE, FIST)
     - single_hand_tolerance_thresh (when nb_hands=2 only) : if there is only one hand in a frame, 
             in order to know when a second hand will appear you need to run the palm detection 
             in the following frames. Because palm detection is slow, you may want to delay 
@@ -112,6 +114,7 @@ class HandFaceTracker:
                 internal_fps=None,
                 resolution="full",
                 internal_frame_height=640,
+                use_gesture=False,
                 hlm_score_thresh=0.8,
                 single_hand_tolerance_thresh=3,
                 focus=None,
@@ -147,6 +150,7 @@ class HandFaceTracker:
             self.focus = max(min(255, int(focus)), 0)
            
         self.trace = trace
+        self.use_gesture = use_gesture
         self.single_hand_tolerance_thresh = single_hand_tolerance_thresh
         self.double_face = double_face
         if self.double_face:
@@ -637,6 +641,8 @@ class HandFaceTracker:
         # World landmarks
         if self.use_world_landmarks:
             hand.world_landmarks = np.array(res["world_lms"][hand_idx]).reshape(-1, 3)
+
+        if self.use_gesture: mpu.recognize_gesture(hand)
 
         return hand
 

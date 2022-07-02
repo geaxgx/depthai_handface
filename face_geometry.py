@@ -1,5 +1,5 @@
 # This is (slightly adapted) code from https://github.com/Rassibassi/mediapipeDemos/blob/main/custom/face_geometry.py
-# which is itsekf a numpy face geometry implementation of the mediapipe face geometry module 
+# which is itself a numpy implementation of the mediapipe face geometry module 
 # https://github.com/google/mediapipe/tree/master/mediapipe/modules/face_geometry
 
 

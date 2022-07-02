@@ -6,6 +6,7 @@ from face_mesh_connections import FACEMESH_TESSELATION, FACEMESH_LIPS, FACEMESH_
 from shapely.geometry import Polygon, Point
 
 import random, math
+from FPS import now
 
 LINES_HAND = [[0,1],[1,2],[2,3],[3,4], 
             [0,5],[5,6],[6,7],[7,8],
@@ -30,6 +31,7 @@ class HandFaceRenderer:
         # Rendering flags
         self.show_hand_rot_rect = False
         self.show_hand_landmarks = True
+        self.show_gesture = self.tracker.use_gesture
         self.hand_style = 0
         self.show_face_rot_rect = False
         self.show_face_landmarks = True
@@ -46,6 +48,10 @@ class HandFaceRenderer:
         self.show_fps = True
         self.laconic = False # If True, display a black frame instead of the original frame
         self.show_metric_landmarks = self.show_pose = self.tracker.use_face_pose
+        if self.tracker.use_face_pose:
+            # Smoothing filter for metric_landmarks
+            self.metric_filter = OneEuroFilter(min_cutoff=0.5, beta=2)
+        self.smooth_metric = False
         self.metric_style = 0
         self.pose_style = 1
         self.magnify_factor = 1.
@@ -92,6 +98,9 @@ class HandFaceRenderer:
                     color = (0,128,255)
                 for x,y in hand.landmarks[:,:2]:
                     cv2.circle(self.frame, (int(x), int(y)), radius, color, -1)
+            if self.tracker.use_gesture and self.show_gesture:
+                    cv2.putText(self.frame, hand.gesture, (info_ref_x-20, info_ref_y-50), 
+                            cv2.FONT_HERSHEY_PLAIN, 3, (255,255,255), 3)
 
                 
         if self.show_xyz:
@@ -121,8 +130,6 @@ class HandFaceRenderer:
                 cv2.polylines(self.frame, [np.array(face.rect_points)], True, (0,255,255), 2, cv2.LINE_AA)
             radius = 2
             if self.show_face_landmarks:
-
-               
                 if self.face_style == 0:
                     for i in self.not_refined_lm_idx:
                         cv2.circle(self.frame, tuple(face.landmarks[i,:2]), radius, (255,255,255), -1)
@@ -137,8 +144,8 @@ class HandFaceRenderer:
                             cv2.circle(self.frame, tuple(face.landmarks[i,:2]), radius, (0,0,255), -1)
                         for i in REFINEMENT_IDX_MAP['right iris']:
                             cv2.circle(self.frame, tuple(face.landmarks[i,:2]), radius, (0,0,255), -1)
-                elif self.face_style in [1, 2]:
 
+                elif self.face_style in [1, 2]:
                     if self.face_style == 2:
                         self.draw_line_set(self.frame, face.landmarks, FACEMESH_TESSELATION, (255,255,255), 1)
                     self.draw_line_set(self.frame, face.landmarks, FACEMESH_LIPS, (0,128,255), 2)
@@ -166,12 +173,16 @@ class HandFaceRenderer:
                         pass
                     self.draw_line_set(self.frame, face.landmarks, FACEMESH_LIPS, (0,128,255), 2)
                     self.draw_line_set(self.frame, face.landmarks, FACEMESH_EYES_EYEBROWS, (0,255,0), 2)
-
+                
 
             if self.show_metric_landmarks:
                 frame_metric = np.zeros((650, 650, 3), dtype=np.uint8)
+                cv2.putText(frame_metric, f"Press 's' {'for smoothing' if not self.smooth_metric else 'to cancel smoothing'}", (20,30), cv2.cv2.FONT_HERSHEY_PLAIN, 1.5, (255,255,255), 1)
                 points = face.metric_landmarks[:,:2].copy()
                 points[:,1] = -points[:,1]
+                if self.smooth_metric:
+                    points = self.metric_filter.apply(points, timestamp=now())
+
                 points = (points * 29 + 325).astype(int)
                 if self.metric_style == 0:
                     for i in self.not_refined_lm_idx:
@@ -249,7 +260,7 @@ class HandFaceRenderer:
                     # pose_style = 4 : bubble effect with pulsation
                     for i in range(468):
                         try:
-                            cv2.circle(self.frame, tuple(points2D[i]), int(self.radius), self.random_color, 1)
+                            cv2.circle(self.frame, tuple(points2D[i]), int(self.radius), self.random_color, 2)
                         except:
                             pass
                     if self.pose_style == 3:
@@ -324,6 +335,9 @@ class HandFaceRenderer:
         elif key == ord('6'):
             if self.tracker.xyz:
                 self.show_xyz_zone = not self.show_xyz_zone 
+        elif key == ord('g'):
+            if self.tracker.use_gesture:
+                self.show_gesture = not self.show_gesture
         elif key == ord('f'):
             nb_styles = 4 if self.tracker.with_attention else 3
             self.face_style = (self.face_style + 1) % nb_styles
@@ -338,4 +352,9 @@ class HandFaceRenderer:
             self.hand_style = (self.hand_style + 1) % nb_styles
         elif key == ord('b'):
             self.laconic = not self.laconic
+        elif key == ord('s'):
+            # Smoothing filter on metric_landmarks
+            self.smooth_metric = not self.smooth_metric
+            if self.smooth_metric:
+                self.metric_filter.reset()
         return key

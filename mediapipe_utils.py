@@ -168,6 +168,84 @@ def find_isp_scale_params(size, resolution, is_height=True):
             min_dist = dist
     return candidate, size_candidates[candidate]
 
+def distance(a, b):
+    """
+    a, b: 2 points (in 2D or 3D)
+    """
+    return np.linalg.norm(a-b)
+
+def angle(a, b, c):
+    # https://stackoverflow.com/questions/35176451/python-code-to-calculate-angle-between-three-point-using-their-3d-coordinates
+    # a, b and c : points as np.array([x, y, z]) 
+    ba = a - b
+    bc = c - b
+    cosine_angle = np.dot(ba, bc) / (np.linalg.norm(ba) * np.linalg.norm(bc))
+    angle = np.arccos(cosine_angle)
+
+    return np.degrees(angle)
+
+def recognize_gesture(hand):           
+    # Finger states
+    # state: -1=unknown, 0=close, 1=open
+    d_3_5 = distance(hand.norm_landmarks[3], hand.norm_landmarks[5])
+    d_2_3 = distance(hand.norm_landmarks[2], hand.norm_landmarks[3])
+    angle0 = angle(hand.norm_landmarks[0], hand.norm_landmarks[1], hand.norm_landmarks[2])
+    angle1 = angle(hand.norm_landmarks[1], hand.norm_landmarks[2], hand.norm_landmarks[3])
+    angle2 = angle(hand.norm_landmarks[2], hand.norm_landmarks[3], hand.norm_landmarks[4])
+    hand.thumb_angle = angle0+angle1+angle2
+    if angle0+angle1+angle2 > 460 and d_3_5 / d_2_3 > 1.2: 
+        hand.thumb_state = 1
+    else:
+        hand.thumb_state = 0
+
+    if hand.norm_landmarks[8][1] < hand.norm_landmarks[7][1] < hand.norm_landmarks[6][1]:
+        hand.index_state = 1
+    elif hand.norm_landmarks[6][1] < hand.norm_landmarks[8][1]:
+        hand.index_state = 0
+    else:
+        hand.index_state = -1
+
+    if hand.norm_landmarks[12][1] < hand.norm_landmarks[11][1] < hand.norm_landmarks[10][1]:
+        hand.middle_state = 1
+    elif hand.norm_landmarks[10][1] < hand.norm_landmarks[12][1]:
+        hand.middle_state = 0
+    else:
+        hand.middle_state = -1
+
+    if hand.norm_landmarks[16][1] < hand.norm_landmarks[15][1] < hand.norm_landmarks[14][1]:
+        hand.ring_state = 1
+    elif hand.norm_landmarks[14][1] < hand.norm_landmarks[16][1]:
+        hand.ring_state = 0
+    else:
+        hand.ring_state = -1
+
+    if hand.norm_landmarks[20][1] < hand.norm_landmarks[19][1] < hand.norm_landmarks[18][1]:
+        hand.little_state = 1
+    elif hand.norm_landmarks[18][1] < hand.norm_landmarks[20][1]:
+        hand.little_state = 0
+    else:
+        hand.little_state = -1
+
+    # Gesture
+    if hand.thumb_state == 1 and hand.index_state == 1 and hand.middle_state == 1 and hand.ring_state == 1 and hand.little_state == 1:
+        hand.gesture = "FIVE"
+    elif hand.thumb_state == 0 and hand.index_state == 0 and hand.middle_state == 0 and hand.ring_state == 0 and hand.little_state == 0:
+        hand.gesture = "FIST"
+    elif hand.thumb_state == 1 and hand.index_state == 0 and hand.middle_state == 0 and hand.ring_state == 0 and hand.little_state == 0:
+        hand.gesture = "OK" 
+    elif hand.thumb_state == 0 and hand.index_state == 1 and hand.middle_state == 1 and hand.ring_state == 0 and hand.little_state == 0:
+        hand.gesture = "PEACE"
+    elif hand.thumb_state == 0 and hand.index_state == 1 and hand.middle_state == 0 and hand.ring_state == 0 and hand.little_state == 0:
+        hand.gesture = "ONE"
+    elif hand.thumb_state == 1 and hand.index_state == 1 and hand.middle_state == 0 and hand.ring_state == 0 and hand.little_state == 0:
+        hand.gesture = "TWO"
+    elif hand.thumb_state == 1 and hand.index_state == 1 and hand.middle_state == 1 and hand.ring_state == 0 and hand.little_state == 0:
+        hand.gesture = "THREE"
+    elif hand.thumb_state == 0 and hand.index_state == 1 and hand.middle_state == 1 and hand.ring_state == 1 and hand.little_state == 1:
+        hand.gesture = "FOUR"
+    else:
+        hand.gesture = None
+
 
 # From: https://github.com/google/mediapipe/blob/master/mediapipe/modules/face_landmark/tensors_to_face_landmarks_with_attention.pbtxt
 
@@ -290,3 +368,122 @@ RIGHT_IRIS_IDX_MAP = [474, 475, 476, 477]
 LEFT_EYE_IDX_MAP = [33, 7, 163, 144, 145, 153, 154, 155, 133,
                     173, 157, 158, 159, 160, 161, 246 ]
 LEFT_IRIS_IDX_MAP = [469, 470, 471, 472]
+
+#
+# Filters
+#
+
+class OneEuroFilter: 
+    '''
+    Adapted from: https://github.com/google/mediapipe/blob/master/mediapipe/util/filtering/one_euro_filter.cc
+    Paper: https://cristal.univ-lille.fr/~casiez/1euro/
+
+    frequency:  
+                Frequency of incoming frames defined in seconds. Used
+                only if can't be calculated from provided events (e.g.
+                on the very first frame). Default=30
+    min_cutoff:  
+                Minimum cutoff frequency. Start by tuning this parameter while
+                keeping `beta=0` to reduce jittering to the desired level. 1Hz
+                (the default value) is a a good starting point.
+    beta:       
+                Cutoff slope. After `min_cutoff` is configured, start
+                increasing `beta` value to reduce the lag introduced by the
+                `min_cutoff`. Find the desired balance between jittering and lag. Default=0
+    derivate_cutoff: 
+                Cutoff frequency for derivate. It is set to 1Hz in the
+                original algorithm, but can be turned to further smooth the
+                speed (i.e. derivate) on the object. Default=1
+    '''
+    def __init__(self,
+                frequency=30,
+                min_cutoff=1,
+                beta=0,
+                derivate_cutoff=1,
+                ):
+        self.frequency = frequency
+        self.min_cutoff = min_cutoff
+        self.beta = beta
+        self.derivate_cutoff = derivate_cutoff
+        self.x = LowPassFilter(self.get_alpha(min_cutoff))
+        self.dx = LowPassFilter(self.get_alpha(derivate_cutoff))
+        self.last_timestamp = 0
+
+    def get_alpha(self, cutoff):
+        '''
+        te = 1.0 / self.frequency
+        tau = 1.0 / (2 * Math.PI * cutoff)
+        result = 1 / (1.0 + (tau / te))
+        '''
+        return 1.0 / (1.0 + (self.frequency / (2 * np.pi * cutoff)))
+
+    def apply(self, value, timestamp):
+        '''
+        Applies filter to the value.
+        timestamp in s associated with the value (for instance,
+        timestamp of the frame where you got value from).
+        '''
+        value = value.copy()
+        if self.last_timestamp >= timestamp:
+            # Results are unpreditable in this case, so nothing to do but return same value.
+            return value
+
+        # Update the sampling frequency based on timestamps.
+        if self.last_timestamp != 0 and timestamp != 0:
+            self.frequency = 1 / (timestamp - self.last_timestamp)
+        self.last_timestamp = timestamp
+
+        # Estimate the current variation per second.
+        if self.x.has_last_raw_value():
+            dvalue = (value - self.x.last_raw_value()) * self.frequency
+        else:
+            dvalue = 0
+        edvalue = self.dx.apply_with_alpha(dvalue, self.get_alpha(self.derivate_cutoff))
+
+        # Use it to update the cutoff frequency
+        cutoff = self.min_cutoff + self.beta * np.abs(edvalue)
+
+        # filter the given value.
+        return self.x.apply_with_alpha(value, self.get_alpha(cutoff))
+
+    def reset(self):
+        self.x.reset()
+        self.dx.reset()
+
+        
+class LowPassFilter:
+    '''
+    Adapted from: https://github.com/google/mediapipe/blob/master/mediapipe/util/filtering/low_pass_filter.cc
+    Note that 'value' can be a numpy array
+    '''
+    def __init__(self, alpha=0.9):
+        self.alpha = alpha
+        self.initialized = False
+
+    def apply(self, value):
+        if self.initialized:
+            # Regular lowpass filter.
+            result = self.alpha * value + (1 - self.alpha) * self.stored_value
+        else:
+            result = value
+            self.initialized = True
+        self.raw_value = value
+        self.stored_value = result
+        return result
+
+    def apply_with_alpha(self, value, alpha):
+        self.alpha = alpha
+        return self.apply(value)
+
+    def has_last_raw_value(self):
+        return self.initialized
+
+    def last_raw_value(self):
+        return self.raw_value
+
+    def last_value(self):
+        return self.stored_value
+
+    def reset(self):
+        self.initialized = False
+

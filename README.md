@@ -110,9 +110,11 @@ Renderer arguments:
 |4|Show/hide the face landmarks|
 |5|Show/hide hand spatial location (-xyz)|
 |6|Show/hide the zone used to measure the spatial location (small purple square) (-xyz)|
+|g|Show recognized hand gesture (--gesture)|
 |f|Switch between several face landmark rendering|
-|m|Switch between several face metric landmark rendering|
-|p|Switch between several face pose rendering|
+|m|Switch between several face metric landmark rendering (-p)|
+|p|Switch between several face pose rendering (-p)|
+|s|Apply smoothing filter on metric landmarks (-p)|
 |h|Switch between several hand landmark rendering|
 |b|Draw the landmarks on a black background|
 

@@ -18,6 +18,8 @@ parser_tracker.add_argument('-n', '--nb_hands', type=int, choices=[0,1,2], defau
                     help="Number of hands tracked (default=%(default)i)")                    
 parser_tracker.add_argument('-xyz', "--xyz", action="store_true", 
                     help="Enable spatial location measure of hands and face")
+parser_tracker.add_argument('-g', '--gesture', action="store_true", 
+                    help="Enable gesture recognition")
 parser_tracker.add_argument('-f', '--internal_fps', type=int, 
                     help="Fps of internal color camera. Too high value lower NN fps (default= depends on the model)")                    
 parser_tracker.add_argument('--internal_frame_height', type=int,                                                                                 
@@ -35,6 +37,7 @@ tracker = HandFaceTracker(
         input_src=args.input, 
         double_face=args.double_face,
         use_face_pose=args.use_face_pose,
+        use_gesture=args.gesture,
         xyz=args.xyz,
         with_attention=args.with_attention,
         nb_hands=args.nb_hands,
