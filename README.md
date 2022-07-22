@@ -180,6 +180,7 @@ A few explanations on the pipeline:
 |||
 |-|-|
 |[Blink detection](examples/blink_detection)  |[<img src="examples/blink_detection/media/demo.gif" alt="Blink detection" width="300"/>](examples/blink_detection)|
+|[Blender puppet](examples/blender)  |[<img src="examples/blender/media/demo.webp" alt="Blender puppet" width="300"/>](examples/blender)|
 
 ## Credits
 * [Google Mediapipe](https://github.com/google/mediapipe)

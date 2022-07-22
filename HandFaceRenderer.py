@@ -177,7 +177,7 @@ class HandFaceRenderer:
 
             if self.show_metric_landmarks:
                 frame_metric = np.zeros((650, 650, 3), dtype=np.uint8)
-                cv2.putText(frame_metric, f"Press 's' {'for smoothing' if not self.smooth_metric else 'to cancel smoothing'}", (20,30), cv2.cv2.FONT_HERSHEY_PLAIN, 1.5, (255,255,255), 1)
+                cv2.putText(frame_metric, f"Press 's' {'for smoothing' if not self.smooth_metric else 'to cancel smoothing'}", (20,30), cv2.FONT_HERSHEY_PLAIN, 1.5, (255,255,255), 1)
                 points = face.metric_landmarks[:,:2].copy()
                 points[:,1] = -points[:,1]
                 if self.smooth_metric:
