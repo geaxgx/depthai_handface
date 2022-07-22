@@ -7,7 +7,7 @@ My attempt to control in realtime a virtual character on Blender using running M
 - Inspired by this video: [Blender 2.8 facial mocap using OpenCV and webcam](https://www.youtube.com/watch?v=O7nNO3FLkLU)
 - Using the Blender character [Vincent](https://studio.blender.org/characters/5718a967c379cf04929a4247/v1/).
 - The **Facemesh with Attention** model does not run very fast on the MyriadX (~10 fps, it would run faster on a CPU with the original tflite Mediapipe model), but the depth sensing capability of the OAK-D* is useful to easily replicate the global head location relative to the camera.
-- In this demo, I am not replicating the hand movements. That's something I would like to implement but I am currently not sure how to do it. Nevertheless, the real user hand is tracked and his hand orientation is used to drive the inclination of eyebrows:
+- In this demo, I am not replicating the hand movements. That's something I would like to implement but I am currently not sure how to do it. Nevertheless, the real user hand is tracked and his hand orientation is used to drive the inclination of the eyebrows:
 <p align="center"><img src="media/demo_eyebrows.webp" alt="Demo" width="500"/></p>
   
 - I am new to Blender and know only a little about this powerful tool, so I am confident there is a lot of room for improvement.
@@ -57,21 +57,21 @@ In the panel on right side, there is a tab named `DepthAI Puppet` that centraliz
 
 **DepthAI settings** contains the parameters specific to the depthai_handface pipeline. These parameters cannot be changed when the app is running.
 - `With attention`: if checked the Facemesh with attention model is used and irises are tracked. 
-- `Hands`: the maximum numbers of hands tracked. If 0, there is no hand tracking. Currently, hand tracking is used to drive the eyebrows inclination. Set this parameter to 1, if you want to use this capabilty. Same behaviour if set to 2, but a bit slower sot not recommended.
+- `Hands`: the maximum numbers of hands tracked. If 0, there is no hand tracking. Currently, hand tracking is used to drive the eyebrows inclination. Set this parameter to 1, if you want to use this capabilty. Same behaviour if set to 2, but a bit slower so not recommended.
 - `XYZ location`: if checked, the spatial location of the real user head is tracked and the puppet moves accordingly. Otherwise, the puppet head stays at a fixed location.
 
 Click the button `Starts!` to start the app.
 
 **Runtime settings** contains app parameters that can be changed while the app is runnig:
- - `Look`: the looking direction. If `tracked`, the looking direction follows the irises movement (only if `With attnetion` is checked). With `ahead`, the eyes are always looking forward. With `camera`, the eyes are always looking at the blender virtual camera.
- - `Sensitivity` groups a few parameters associated to animated face body parts. These parameters are values between 0.5 and 1.5. The greater the sensitivity value, the greater the effect on the animation.
+ - `Look`: the looking direction. If `tracked`, the looking direction follows the irises movement (only if `With attention` is checked). With `ahead`, the puppet eyes are always looking forward. With `camera`, the eyes are always looking at the blender virtual camera.
+ - `Sensitivity` groups a few parameters associated with animated face parts. These parameters are float values between 0.5 and 1.5. The greater the sensitivity value, the greater the effect on the animation.
  - `Eyeglasses`: uncheck to remove the glasses.
- - `Background`: you can choose between the default background (mountain view) or a picture that you can take with the OAKD camera by clicking the `Take snapshot` button (the app must be running for the button to be active).
+ - `Background`: you can choose between the default background (mountain view) or a snapshot which is a picture taken with the OAKD camera by clicking the `Take snapshot` button (the app must be running for this button to be active).
   
 **Setting the neutral position:**
-This operation, which is a kind of calibration, is important for better results. The goal is to associate the user reference position with the rest position of the puppet. The operation is done when starting the app or on user request by pressing the "n" key. During the calibration which lasts a few seconds, a red cross appears between the puppet eyes, the user should stay immobile, looking at the red cross, as neutral as possible (not smiling, sit up straight). When the calibration is finished, the cross disappear.
+This operation, which is a kind of calibration, is important for better results. The goal is to associate the user reference position with the rest position of the puppet. The operation is done when starting the app or on user request by pressing the "n" key. During the calibration which lasts a few seconds, a red cross appears between the puppet eyes, you should stay immobile, looking at the red cross, as neutral as possible (not smiling, sit up straight). You know the calibration is finished when the cross disappears.
 
-To stop the app, click the `Stop` button or press the 'Esc' key or right-click in the blender main window.
+To stop the app, click the `Stop` button or press the `Esc` key or right-click in the blender main window.
 
 
 
